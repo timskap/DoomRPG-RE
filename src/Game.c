@@ -18,6 +18,7 @@
 #include "Player.h"
 #include "Sound.h"
 #include "SDL_Video.h"
+#include "Web.h"
 
 // #define CONFIG_VERSION 22 // Original Brew Version
 
@@ -1947,6 +1948,7 @@ void Game_saveConfig(Game_t* game, int num)
 	}
 
 	SDL_RWclose(rw);
+	Web_syncSaves();
 }
 
 void Game_savePlayerState(Game_t* game, char* fileName, char* fileMapName, int x, int y, int angle)
@@ -2034,6 +2036,8 @@ void Game_saveState(Game_t* game, int mapId, int x, int y, int angleDir, boolean
 			Game_savePlayerState(game, "Player", "/junction.bsp", 0, 0, 0);
 		}
 	}
+
+	Web_syncSaves();
 }
 
 void Game_saveWorldState(Game_t* game)

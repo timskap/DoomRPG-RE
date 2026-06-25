@@ -12,7 +12,9 @@
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef __EMSCRIPTEN__
 #include <malloc.h>
+#endif
 #include <zlib.h>
 
 #include "DoomRPG.h"

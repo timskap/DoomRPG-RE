@@ -18,6 +18,11 @@
 #include "Combat.h"
 #include "SDL_Video.h"
 #include "Z_Zip.h"
+#include "Web.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 
 DoomRPG_t* doomRpg = NULL;
@@ -78,12 +83,23 @@ void DoomRPG_Error(const char* fmt, ...) // 0x1C648
 		&colorScheme /* .colorScheme */
 	};
 	
+#ifdef __EMSCRIPTEN__
+	// No blocking modal in the browser: show a DOM overlay and stop the loop.
+	Web_showError(errMsg);
+	if (doomRpg) {
+		doomRpg->closeApplet = true;
+	}
+	emscripten_cancel_main_loop();
+	closeZipFile(&zipFile);
+	exit(0);
+#else
 	SDL_ShowMessageBox(&messageboxdata, NULL);
 	closeZipFile(&zipFile);
 	DoomRPG_FreeAppData(doomRpg);
-	SDL_CloseAudio();
+	DoomRPG_CloseAudio();
 	SDL_Close();
 	exit(0);
+#endif
 
 	//while (1) {} // draw and display forever
 }
@@ -400,7 +416,7 @@ static void setBind(int* keyBinds, int keycode)
 {
 	int i;
 
-	// Examina si existe anteriormente, si es así, se desvinculará de la lista
+	// Examina si existe anteriormente, si es asï¿½, se desvincularï¿½ de la lista
 	// Examines whether it exists previously, if so, it will be unbind from the list
 	for (i = 0; i < KEYBINDS_MAX; i++) {
 		if (keyBinds[i] == keycode) {

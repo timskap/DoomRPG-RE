@@ -4,7 +4,9 @@
 #include <SDL.h>
 #include <SDL_mixer.h>
 #include <stdio.h>
+#ifndef __EMSCRIPTEN__
 #include <fluidsynth.h>
+#endif
 
 #include "DoomRPG.h"
 #include "Game.h"
@@ -50,9 +52,16 @@ void SDL_InitVideo(void)
 	Game_loadConfig(NULL);
 
 	SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+#ifdef __EMSCRIPTEN__
+    // Emscripten's SDL2 has no haptic subsystem, so SDL_INIT_EVERYTHING fails.
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS) < 0) {
+        DoomRPG_Error("Could not initialize SDL: %s", SDL_GetError());
+    }
+#else
     if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
         DoomRPG_Error("Could not initialize SDL: %s", SDL_GetError());
     }
+#endif
 
     flags = SDL_WINDOW_OPENGL| SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
     video_w = sdlVideoModes[sdlVideo.resolutionIndex].width;
@@ -283,7 +292,7 @@ void SDL_InitAudio(void)
 	}
 }
 
-void SDL_CloseAudio(void) {
+void DoomRPG_CloseAudio(void) {
 
 	delete_fluid_audio_driver(fluidSynth.adriver);
 	delete_fluid_synth(fluidSynth.synth);

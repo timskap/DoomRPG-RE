@@ -24,7 +24,11 @@ void SDL_RenderDrawCircle(SDL_Renderer* renderer, int x, int y, int r);
 
 //-----
 
+#ifdef __EMSCRIPTEN__
+#include "MidiPlayer.h"
+#else
 #include <fluidsynth.h>
+#endif
 typedef struct FluidSynth_s
 {
 	fluid_settings_t* settings;
@@ -35,7 +39,7 @@ typedef struct FluidSynth_s
 extern FluidSynth_t fluidSynth;
 
 void SDL_InitAudio(void);
-void SDL_CloseAudio(void);
+void DoomRPG_CloseAudio(void);
 
 //-----
 typedef struct SDLController_s

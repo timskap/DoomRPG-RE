@@ -1,0 +1,22 @@
+# Build output
+/build-web/
+/build/
+
+# Game data — NOT redistributable. Build your own (see web/README.md).
+/data/
+*.zip
+*.jar
+*.bar
+*.mod
+*.mif
+*.sf2
+*.pmd
+
+# Emscripten / Wine scratch
+*.wasm
+*.data
+.wineprefix/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
