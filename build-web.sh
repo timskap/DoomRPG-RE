@@ -50,6 +50,7 @@ emcc \
   -sEXIT_RUNTIME=0 \
   -sINVOKE_RUN=0 \
   -sEXPORTED_RUNTIME_METHODS=callMain,FS \
+  -sEXPORTED_FUNCTIONS=_main,_Web_inGame,_Web_doAction \
   -lidbfs.js \
   "${PRELOAD[@]}" \
   --shell-file "$SHELL_FILE" \

@@ -12,15 +12,40 @@
   }
   #wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px; }
   h1 { font-size: 18px; font-weight: 600; margin: 4px 0; color: #e44; letter-spacing: 1px; }
+  #screen {
+    position: relative;
+    width: 960px; height: 720px;          /* 320x240 internal, scaled 3x */
+    max-width: 96vw; max-height: 78vh;
+    line-height: 0;
+  }
   #canvas {
     background: #000;
     border: 1px solid #333;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
-    width: 960px; height: 720px;          /* 320x240 internal, scaled 3x */
-    max-width: 96vw; max-height: 78vh;
+    width: 100%; height: 100%;
     outline: none;
   }
+  /* On-screen action bar for the 5-button (Meta Display Glasses) scheme. */
+  #actionbar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: none;                         /* shown only during 3D gameplay */
+    align-items: stretch;
+    font: 600 13px/1 ui-monospace, Menlo, Consolas, monospace;
+    background: rgba(8, 8, 10, 0.82);
+    border-top: 2px solid #533;
+    opacity: 0.55;                         /* dimmed hint when not focused */
+    transition: opacity 0.1s;
+  }
+  #actionbar.shown { display: flex; }
+  #actionbar.open { opacity: 1; border-top-color: #e44; }
+  #actionbar .abi {
+    flex: 1 1 0; text-align: center; padding: 7px 2px; color: #cbb;
+    border-right: 1px solid #322; white-space: nowrap;
+  }
+  #actionbar .abi:last-child { border-right: none; }
+  #actionbar.open .abi.sel { background: #e44; color: #100; }
+  #actionbar .hint { flex: 0 0 auto; padding: 7px 8px; color: #977; }
   #status { min-height: 1.2em; font-size: 13px; color: #9a9; }
   #help { font-size: 12px; color: #888; max-width: 960px; line-height: 1.6; }
   #help b { color: #bbb; }
@@ -33,18 +58,18 @@
 <body>
 <div id="wrap">
   <h1>DOOM RPG &mdash; WEB PORT</h1>
-  <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+  <div id="screen">
+    <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+    <div id="actionbar"></div>
+  </div>
   <div id="status">Loading&hellip;</div>
   <div id="help">
-    <b>Move</b> <kbd>&uarr;</kbd><kbd>&darr;</kbd> &middot;
-    <b>Turn</b> <kbd>&larr;</kbd><kbd>&rarr;</kbd> &middot;
-    <b>Strafe</b> <kbd>A</kbd><kbd>D</kbd> &middot;
-    <b>Attack / Use / Talk</b> <kbd>Enter</kbd> &middot;
-    <b>Weapon</b> <kbd>Z</kbd><kbd>X</kbd> &middot;
-    <b>Pass turn</b> <kbd>C</kbd> &middot;
-    <b>Automap</b> <kbd>Tab</kbd> &middot;
-    <b>Menu / Back</b> <kbd>Esc</kbd>.
-    Click the screen to capture the mouse for look/turn (press <kbd>Esc</kbd> to release).
+    <b>5-button / Meta Display Glasses:</b>
+    <kbd>&uarr;</kbd> forward &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> turn &middot;
+    <kbd>Enter</kbd> attack/use &middot; <kbd>&darr;</kbd> opens the bottom action bar
+    (in it: <kbd>&larr;</kbd><kbd>&rarr;</kbd> choose, <kbd>Enter</kbd> do, <kbd>&darr;</kbd> close).
+    On a desktop keyboard the full controls also work (<kbd>A</kbd><kbd>D</kbd> strafe,
+    <kbd>Z</kbd><kbd>X</kbd> weapon, <kbd>C</kbd> pass, <kbd>Tab</kbd> map, <kbd>Esc</kbd> menu).
     Saves persist in your browser.
   </div>
 </div>
@@ -56,34 +81,94 @@
   var Module = {
     canvas: canvas,
     arguments: [],
-    // INVOKE_RUN=0: we start main() ourselves after the save FS is ready.
-    noInitialRun: true,
-    print: function (text) { console.log(text); },
-    printErr: function (text) { console.warn(text); },
-    setStatus: function (text) { if (statusEl) statusEl.textContent = text; },
+    noInitialRun: true,           // INVOKE_RUN=0: we start main() after the save FS is ready
+    print: function (t) { console.log(t); },
+    printErr: function (t) { console.warn(t); },
+    setStatus: function (t) { if (statusEl) statusEl.textContent = t; },
     onRuntimeInitialized: function () {
       var FS = Module.FS;
-      // Mount an IndexedDB-backed filesystem for the game's save files
-      // (Config/Player/Player2/World) and populate it from a previous session
-      // before main() runs (main chdir()s into /save).
       try { FS.mkdir('/save'); } catch (e) {}
       try {
         FS.mount(FS.filesystems.IDBFS, {}, '/save');
       } catch (e) {
         console.warn('[DoomRPG] IDBFS mount failed; saves will not persist.', e);
-        Module.setStatus('');
-        Module.callMain(Module.arguments);
-        return;
+        Module.setStatus(''); Module.callMain(Module.arguments); return;
       }
       FS.syncfs(true, function (err) {
         if (err) console.warn('[DoomRPG] initial syncfs failed:', err);
-        Module.setStatus('');
-        Module.callMain(Module.arguments);
+        Module.setStatus(''); Module.callMain(Module.arguments);
       });
     }
   };
 
-  // Resume the Web Audio context on first user gesture (browser autoplay policy).
+  // ---- Meta Display Glasses: 5-button control (arrows + Enter) ----------
+  // Down opens a one-line action bar holding everything that doesn't fit on
+  // the 5 buttons. Bar is only reachable during 3D gameplay (Web_inGame), so
+  // the engine's own menus keep using Down/Up to navigate.
+  var BAR = [
+    { id: 0, label: 'Back'  },   // move backward
+    { id: 1, label: 'Wpn ◄' }, // prev weapon
+    { id: 2, label: 'Wpn ►' }, // next weapon
+    { id: 3, label: 'Pass'  },   // pass turn
+    { id: 4, label: 'Map'   },   // automap
+    { id: 5, label: 'Menu'  }    // open menu / back
+  ];
+  var NAV = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Enter: 1 };
+  var barEl = document.getElementById('actionbar');
+  var barOpen = false, barSel = 0, lastInGame = false;
+
+  BAR.forEach(function (a) {
+    var s = document.createElement('span'); s.className = 'abi'; s.textContent = a.label;
+    barEl.appendChild(s);
+  });
+  var hint = document.createElement('span'); hint.className = 'hint'; hint.textContent = '▼';
+  barEl.insertBefore(hint, barEl.firstChild);
+  var items = Array.prototype.slice.call(barEl.querySelectorAll('.abi'));
+
+  function inGame() {
+    try { return !!(Module._Web_inGame && Module._Web_inGame()); } catch (e) { return false; }
+  }
+  function doAction(id) { try { Module._Web_doAction(id); } catch (e) {} }
+  function renderBar() {
+    barEl.classList.toggle('open', barOpen);
+    for (var i = 0; i < items.length; i++) items[i].classList.toggle('sel', barOpen && i === barSel);
+  }
+  function setBar(open) { barOpen = open; if (open) barSel = 0; barEl.classList.add('shown'); renderBar(); }
+
+  // Reflect game state -> bar visibility (cheap poll).
+  setInterval(function () {
+    var ig = inGame();
+    if (ig !== lastInGame) {
+      lastInGame = ig;
+      barEl.classList.toggle('shown', ig);
+      if (!ig && barOpen) { barOpen = false; renderBar(); }
+    }
+  }, 150);
+
+  window.addEventListener('keydown', function (e) {
+    if (!NAV[e.key]) return;                       // non-glasses keys pass through (desktop)
+    if (barOpen) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (e.repeat) return;
+      if (e.key === 'ArrowLeft')       { barSel = (barSel - 1 + BAR.length) % BAR.length; renderBar(); }
+      else if (e.key === 'ArrowRight') { barSel = (barSel + 1) % BAR.length; renderBar(); }
+      else if (e.key === 'Enter')      { doAction(BAR[barSel].id); barOpen = false; renderBar(); }
+      else                             { barOpen = false; renderBar(); }   // Up/Down close
+      return;
+    }
+    if (e.key === 'ArrowDown' && inGame()) {        // Down opens the bar in 3D gameplay
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (!e.repeat) setBar(true);
+    }
+    // otherwise: let the engine handle it (move/turn/attack, or menu navigation)
+  }, true);
+
+  // Swallow key-ups while the bar is open so SDL never sees a dangling arrow.
+  window.addEventListener('keyup', function (e) {
+    if (NAV[e.key] && barOpen) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+
+  // Resume Web Audio on first user gesture (browser autoplay policy).
   function resumeAudio() {
     try {
       if (Module.SDL2 && Module.SDL2.audioContext && Module.SDL2.audioContext.state === 'suspended') {
